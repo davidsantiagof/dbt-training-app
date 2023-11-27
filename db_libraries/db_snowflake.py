@@ -14,17 +14,7 @@ from snowflake.sqlalchemy import URL, CopyIntoStorage, AWSBucket, CSVFormatter
 
 from dotenv import load_dotenv
 
-import wget
 import csv
-
-from faker import Faker
-
-import pandas as pd
-
-##import faker_commerce
-
-fake = Faker()
-##fake.add_provider(faker_commerce.Provider)
 
 Base = declarative_base()
 
@@ -37,12 +27,9 @@ engine_raw = create_engine(
               password=os.environ['SNOWFLAKE_PASSWORD'],
               warehouse='newco_wh',
               database='newco_sources_db',      
-              #schema ='public',
               autocommit=True
               )
             )
-
-
 
 class Sales(Base):
     
@@ -55,7 +42,6 @@ class Sales(Base):
     quantity        = Column(Integer)
     amount          = Column(Numeric)
     customer_id     = Column(Integer)
-    #invoice_id      = Column(Integer, Sequence(name="invoice_id_seq", schema="sales_sys", start=1000, increment=1),  autoincrement=True)
     etl_inserted_at = Column(DateTime)
     etl_updated_at  = Column(DateTime)
     
@@ -185,13 +171,6 @@ def insert_sale(delayed_flag=0):
         session.refresh(sale)
     return sale
 
-
-
-def Xmain():
-    delay_flag = input("Insert Sale => Delay? 01")
-    inserted = insert_sale(int(delay_flag))
-    print(inserted)
-
 def main():  # 
 
     while True:
@@ -214,30 +193,26 @@ def main():  #
 
             start_date = input("Load Sales => Type StartDate (YYYY-MM-DD HH:MM:SS): ")
             start_date_fmt = datetime.datetime.strptime(start_date,date_format)
-            #print(start_date_fmt)
-            #print(type(start_date_fmt))
 
             end_date = input("Load Sales => Type EndDate (YYYY-MM-DD HH:MM:SS): ")
             end_date_fmt = datetime.datetime.strptime(end_date,date_format)
-            #print(end_date_fmt)
-            #print(type(end_date_fmt))
 
             num_sales = input("Load Sales => Type NumSales: ")
             num_sales_fmt = int(num_sales)
-            #print(num_sales_fmt)
-            #print(type(num_sales_fmt))
             
             dirname = os.path.dirname(__file__)
             filename = os.path.join(dirname,'./sources/init_load.csv')
             generate_csv(filename,start_date_fmt, end_date_fmt, num_sales_fmt)
             load_csv(filename,Sales)
-            print("CSV Loaded?") 
+            print("CSV Loaded OK") 
         elif option == '2':
             print("Inserting Single Sale:")
             insert_sale(0)
+            print("Single Sale Inserted OK")
         elif option == '3':
             print("Inserting Single Delayed Sale:")
             insert_sale(1)
+            print("Delayed Single Sale Inserted OK")
         elif option == 'x':
             print("Exiting...")
             break
@@ -246,191 +221,3 @@ def main():  #
 
 if __name__ == "__main__":
     main()
-
-###############################################
-###############################################
-###############################################
-
-class IncrementalEvents(Base):
-    __tablename__ = "incremental_events"
-    __table_args__ = {'schema': 'jaffle_shop'}
-    
-    event_id = Column(Integer, Sequence(name="event_id_seq", schema="jaffle_shop", start=1000, increment=1), primary_key=True, autoincrement=True)
-    resource_id = Column(Integer)
-    event_type = Column(String)
-    event_value = Column(Integer)
-    event_created_at = Column(DateTime)
-    etl_inserted_at = Column(DateTime,  default=datetime.datetime.utcnow)
-    etl_updated_at = Column(DateTime,  default=datetime.datetime.utcnow)
-
-    def __init__(self, resource_id, event_type, event_value, event_created_at, event_id=None, etl_inserted_at=None, etl_updated_at=None):
-        self.event_id = event_id
-        self.resource_id = resource_id
-        self.event_type = event_type
-        self.event_value = event_value
-        self.event_created_at = event_created_at
-        self.etl_inserted_at = etl_inserted_at
-        self.etl_updated_at = etl_updated_at
-    
-class SnapshotProducts(Base):
-    __tablename__ = "snapshot_products"
-    __table_args__ = {'schema': 'jaffle_shop'}
-    
-    product_id = Column(Integer, Sequence(name="product_id_seq", schema="jaffle_shop", start=1000, increment=1), primary_key=True, autoincrement=True)
-    product_name = Column(String)
-    product_price = Column(Integer)
-    product_created_at = Column(DateTime)
-    product_updated_at = Column(DateTime)
-    etl_inserted_at = Column(DateTime,  default=datetime.datetime.utcnow)
-    etl_updated_at = Column(DateTime,  default=datetime.datetime.utcnow)
-
-    def __init__(self, product_name, product_price, product_created_at, product_updated_at, product_id=None, etl_inserted_at=None, etl_updated_at=None):
-        self.product_id = product_id
-        self.product_name = product_name
-        self.product_price = product_price
-        self.product_created_at = product_created_at
-        self.product_updated_at = product_updated_at
-        self.etl_inserted_at = etl_inserted_at
-        self.etl_updated_at = etl_updated_at
-
-    def __repr__(self):
-        return f"[PRODUCT => product_id: {self.product_id}, product_name: {self.product_name}, product_price: {self.product_price}, product_created_at: {self.product_created_at}, product_updated_at: {self.product_updated_at}, etl_inserted_at: {self.etl_inserted_at}, etl_updated_at: {self.etl_updated_at}]\n"
-
-
-
-def create_incremental_events_table():
-    #Base.metadata.create_all(engine_raw)
-    Base.metadata.tables['jaffle_shop.incremental_events'].create(engine_raw)
-
-def create_snapshot_products_table():
-    #Base.metadata.create_all(engine_raw)
-    Base.metadata.tables['jaffle_shop.snapshot_products'].create(engine_raw)
-
-def get_incremtal_events():
-    Session = sessionmaker(bind=engine_raw)
-
-    with Session() as session:
-        events = session.query(IncrementalEvents)
-
-    return events.all()
-
-def create_event_on_new_resource(delayed_flag=0):
-    Session = sessionmaker(bind=engine_raw)
-
-    with Session() as session:
-
-        current_resource_id = session.query(func.max(IncrementalEvents.resource_id))
-
-        if current_resource_id.scalar() is not None:
-            current_resource_id = current_resource_id.scalar() 
-        else:
-            current_resource_id = 0
-
-        event_types = ['A','B','C','D']
-
-        random_event_type_idx = random.randint(1,4)-1
-
-        temp_created_at = datetime.datetime.utcnow() 
-
-        if delayed_flag == 0:
-            event_created_at = temp_created_at 
-        elif delayed_flag == 1:
-            event_created_at = temp_created_at - datetime.timedelta(seconds=random.randint(30,180))
-
-        event = IncrementalEvents(
-                            resource_id = current_resource_id + 1,
-                            event_type = event_types[random_event_type_idx],
-                            event_value = random.randint(0,1000),
-                            event_created_at = event_created_at
-                            ) 
-        session.add(event)
-        session.commit()
-        session.refresh(event)
-    
-    return event
-
-def create_event_on_existing_resource(delayed_flag=0):
-    Session = sessionmaker(bind=engine_raw)
-
-    with Session() as session:
-
-        resources = session.query(IncrementalEvents.resource_id).distinct().all()
-        #print(resources)
-        sample_resource = random.sample(resources,1)
-        
-        event_types = ['A','B','C','D']
-
-        random_event_type_idx = random.randint(1,4)-1
-
-        temp_created_at = datetime.datetime.utcnow() 
-
-        if delayed_flag == 0:
-            event_created_at = temp_created_at 
-        elif delayed_flag == 1:
-            event_created_at = temp_created_at - datetime.timedelta(seconds=random.randint(30,180))
-
-        event = IncrementalEvents(
-                            resource_id = sample_resource[0].resource_id,
-                            event_type = event_types[random_event_type_idx],
-                            event_value = random.randint(0,1000),
-                            event_created_at = event_created_at
-                            ) 
-        session.add(event)
-        session.commit()
-        session.refresh(event)
-    
-    return event
-
-
-def create_new_product():
-    Session = sessionmaker(bind=engine_raw)
-
-    with Session() as session:
-
-       
-
-        product_name = fake.ecommerce_name()
-        product_price = random.randint(10,1000)
-
-        product = SnapshotProducts(
-                            product_name = product_name,
-                            product_price = product_price,
-                            product_created_at = datetime.datetime.utcnow(),
-                            product_updated_at = datetime.datetime.utcnow()
-                            ) 
-        session.add(product)
-        session.commit()
-        session.refresh(product)
-    
-    return product
-
-def update_existing_product_price():
-    Session = sessionmaker(bind=engine_raw)
-    with Session() as session:
-
-        products = session.query(SnapshotProducts).all()
-        sample_product = random.sample(products,1)
-
-        new_product_price = random.randint(10,1000)
-
-        updated_product = session.get(SnapshotProducts,sample_product[0].product_id)
-
-        updated_product.product_price = new_product_price
-        updated_product.product_updated_at = datetime.datetime.utcnow() 
-        updated_product.etl_updated_at = datetime.datetime.utcnow()
-
-        session.add(updated_product)
-        session.commit()
-        session.refresh(updated_product)
-    
-    return updated_product
-
-
-
-
-
-    
-
-
-
-
