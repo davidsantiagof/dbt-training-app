@@ -160,26 +160,75 @@ def load_csv(filename):
 
     
 def insert_sale(delayed_flag=0):
-    a=1
+    
+    date_format = '%Y-%m-%d %H:%M:%S'
+    
+    Session = sessionmaker(bind=engine_raw)
 
-def main():
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname,'./sources/init_load.csv')
-    ##generate_csv(datetime.datetime(2023,11,20,0,0,0), datetime.datetime(2023,11,22,23,59,59),100)
-    load_csv(filename)
-    print("CSV Loaded?")
+    with Session() as session:
+        result_max_created_at = session.query(func.max(Sales.created_at)).first()                       #list
+        result_max_etl_inserted_at = session.query(func.max(Sales.etl_inserted_at)).first()             #list
 
-def temp_main():  # 
+    max_created_at = result_max_created_at[0]
+    max_etl_inserted_at = result_max_etl_inserted_at[0]
+    
+    if delayed_flag == 0:
+        created_at = max_etl_inserted_at + datetime.timedelta(seconds=random.randint(1,10))
+        etl_inserted_at = created_at
+        etl_updated_at = created_at
+        print('max_created_at: ' + max_created_at.strftime(date_format))
+        print('created_at: ' + created_at.strftime(date_format))
+        print('etl_inserted_at: ' + etl_inserted_at.strftime(date_format))
+        print('etl_updated_at: ' + etl_updated_at.strftime(date_format))
+    elif delayed_flag == 1:
+        print("Current MAX(Sales.created_at): " + max_created_at.strftime(date_format))
+        delay_sec = input("Insert Sale => Type Delay (Seconds): ")
+        delay_sec_fmt = int(delay_sec)
+        created_at = max_created_at - datetime.timedelta(seconds=delay_sec_fmt)
+        etl_inserted_at = max_etl_inserted_at + datetime.timedelta(seconds=random.randint(1,10))
+        etl_updated_at = etl_inserted_at
+        print('created_at (delayed): ' + created_at.strftime(date_format))
+        print('etl_inserted_at (delayed): ' + etl_inserted_at.strftime(date_format))
+        print('etl_updated_at (delayed): ' + etl_updated_at.strftime(date_format))
+    
+    product_id = random.randint(100,110)
+    quantity = random.randint(1,5)
+    amount = random.randint(100,1000)
+    customer_id = random.randint(100,199)
+    invoice_id = 0
+    
+    with Session() as session:
+        sale = Sales(   
+                        created_at      = created_at,
+                        product_id      = product_id,
+                        quantity        = quantity,
+                        amount          = amount,
+                        customer_id     = customer_id,
+                        invoice_id      = invoice_id,
+                        etl_inserted_at = etl_inserted_at,
+                        etl_updated_at  = etl_updated_at
+                    ) 
+        session.add(sale)
+        session.commit()
+        session.refresh(sale)
+    return sale
+
+
+
+def Xmain():
+    delay_flag = input("Insert Sale => Delay? 01")
+    inserted = insert_sale(int(delay_flag))
+    print(inserted)
+
+def main():  # 
 
     while True:
         print("\nOPTIONS")
         print("c: Create sales Table")
         print("d: Drop sales Table")
         print("1: Load Sales")
-        #print("1: Insert event on new resource")
-        #print("2: Insert delayed event on new resource")
-        #print("3: Insert event on existing resource")
-        #print("4: Insert delayed event on existing resource")
+        print("2: Insert Single Sale")
+        print("3: Insert Single Delayed Sale")
         print("x: Exit\n")
         option = input("Please enter option: ")
         if option == 'c':
@@ -189,16 +238,34 @@ def temp_main():  #
             drop_table(Sales)
             print("Table Droped OK")
         elif option == '1':
+            date_format = '%Y-%m-%d %H:%M:%S'
+
+            start_date = input("Load Sales => Type StartDate (YYYY-MM-DD HH:MM:SS): ")
+            start_date_fmt = datetime.datetime.strptime(start_date,date_format)
+            #print(start_date_fmt)
+            #print(type(start_date_fmt))
+
+            end_date = input("Load Sales => Type EndDate (YYYY-MM-DD HH:MM:SS): ")
+            end_date_fmt = datetime.datetime.strptime(end_date,date_format)
+            #print(end_date_fmt)
+            #print(type(end_date_fmt))
+
+            num_sales = input("Load Sales => Type NumSales: ")
+            num_sales_fmt = int(num_sales)
+            #print(num_sales_fmt)
+            #print(type(num_sales_fmt))
+            
             dirname = os.path.dirname(__file__)
             filename = os.path.join(dirname,'./sources/init_load.csv')
-            ##generate_csv(datetime.datetime(2023,11,20,0,0,0), datetime.datetime(2023,11,22,23,59,59),100)
+            generate_csv(filename,start_date_fmt, end_date_fmt, num_sales_fmt)
             load_csv(filename)
             print("CSV Loaded?") 
-        ##elif option == '4':
-        ##    #print("4 was pressed\n")
-        ##    event = db.create_event_on_existing_resource(1)
-        ##    print("Delayed event inserted on existing resource: ")
-        ##    print(event)
+        elif option == '2':
+            print("Inserting Single Sale:")
+            insert_sale(0)
+        elif option == '3':
+            print("Inserting Single Delayed Sale:")
+            insert_sale(1)
         elif option == 'x':
             print("Exiting...")
             break
