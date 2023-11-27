@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy import Table, Column, Sequence, create_engine, text, MetaData, Identity
 
-from sqlalchemy.types import Integer, Numeric, Float, String,  Date, DateTime, Boolean
+from sqlalchemy.types import SmallInteger, Integer, Numeric, Float, String,  Date, DateTime, Boolean
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import func
@@ -34,46 +34,44 @@ engine_raw = create_engine(
             URL(
               account=os.environ['SNOWFLAKE_ACCOUNT'],
               user=os.environ['SNOWFLAKE_USER'],
-              #authenticator='externalbrowser',
               password=os.environ['SNOWFLAKE_PASSWORD'],
-              warehouse='transforming',
-              database='raw_sources',      
+              warehouse='newco_wh',
+              database='newco_sources_db',      
               #schema ='public',
               autocommit=True
               )
-              #,echo=True
-        )
+            )
 
 
 
 class Sales(Base):
     
     __tablename__ = "sales"
-    __table_args__ = {'schema':'jaffle_shop'}
+    __table_args__ = {'schema':'sales_sys'}
 
+    id              = Column(Integer, Sequence(name="sale_id_seq", schema="sales_sys", start=1000, increment=1), primary_key=True, autoincrement=True)
     created_at      = Column(DateTime)
     product_id      = Column(Integer)
     quantity        = Column(Integer)
     amount          = Column(Numeric)
     customer_id     = Column(Integer)
-    invoice_id      = Column(Integer)
+    #invoice_id      = Column(Integer, Sequence(name="invoice_id_seq", schema="sales_sys", start=1000, increment=1),  autoincrement=True)
     etl_inserted_at = Column(DateTime)
     etl_updated_at  = Column(DateTime)
     
-    id              = Column(Integer, Sequence(name="sales_id_seq", schema="jaffle_shop", start=1000, increment=1), primary_key=True, autoincrement=True)
+    _is_delayed    = Column(Boolean)
     
-    def __init__(self, created_at, product_id, quantity, amount, customer_id, invoice_id, etl_inserted_at, etl_updated_at, id=None):
+    def __init__(self, created_at, product_id, quantity, amount, customer_id, etl_inserted_at, etl_updated_at, _is_delayed= False):
             
         self.created_at      = created_at
         self.product_id      = product_id
         self.quantity        = quantity
         self.amount          = amount
         self.customer_id     = customer_id
-        self.invoice_id      = invoice_id
         self.etl_inserted_at = etl_inserted_at
         self.etl_updated_at  = etl_updated_at
-
-        self.id              = id
+        
+        self._is_delayed     = _is_delayed
         
 def create_table(Table):
     Base.metadata.tables[Table.__table_args__['schema']+'.'+Table.__tablename__].create(engine_raw)
@@ -88,73 +86,45 @@ def execute_sql(sql):
         session.commit()
     return result
 
-def load_sales(StartDateTime, EndDateTime, NumSales):
-    a = 1
-
-    td = EndDateTime - StartDateTime
-    created_at_array = sorted(([StartDateTime + random.random() * td for _ in range(NumSales)]))
-
-    product_id_array = random.choices(range(100,110),k=NumSales)
-    quantity_array = random.choices(range(1,5),k=NumSales)
-    amount_array = random.choices(range(100,1000),k=NumSales)
-    customer_id_array = random.choices(range(100,199),k=NumSales)
-    invoice_id_array = [0] * NumSales
-    etl_inserted_at_list = created_at_array
-    etl_updated_at_list =  created_at_array
-
-    Session = sessionmaker(bind=engine_raw)
-
-    with Session() as session:
-        for row in range(NumSales):
-            
-            sale = Sales(   created_at=created_at_array[row],
-                            product_id=product_id_array[row],
-                            quantity=quantity_array[row],
-                            amount=amount_array[row],
-                            customer_id=customer_id_array[row],
-                            invoice_id=invoice_id_array[row],
-                            etl_inserted_at=etl_inserted_at_list[row],
-                            etl_updated_at=etl_updated_at_list[row]
-                        ) 
-            session.add(sale)
-            session.commit()
-            session.refresh(sale)
-
 def generate_csv(filename, StartDateTime, EndDateTime, NumSales):
     
     td = EndDateTime - StartDateTime
-    created_at_array = sorted(([StartDateTime + random.random() * td for _ in range(NumSales)]))
+    
+    created_at_list      = sorted(([StartDateTime + random.random() * td for _ in range(NumSales)]))
+    product_id_list      = [100]* NumSales                                                              #Single Product Company (product_id = 100) (for now)
+    quantity_list        = random.choices(range(1,5),k=NumSales)
+    amount_list          = [q * 100 for q in quantity_list]                                             #Fixed Unit Price (Cents) (100)
+    customer_id_list     = random.choices(range(100,199),k=NumSales)                                    #Fixed Number of Customers
+    etl_inserted_at_list = created_at_list
+    etl_updated_at_list  = created_at_list
+    _is_delayed_list     = [False] * NumSales
 
-    product_id_array = random.choices(range(100,110),k=NumSales)
-    quantity_array = random.choices(range(1,5),k=NumSales)
-    amount_array = random.choices(range(100,1000),k=NumSales)
-    customer_id_array = random.choices(range(100,199),k=NumSales)
-    invoice_id_array = [0] * NumSales
-    etl_inserted_at_list = created_at_array
-    etl_updated_at_list =  created_at_array
 
     output = list(
-                zip(created_at_array,product_id_array,quantity_array,amount_array,customer_id_array,invoice_id_array,etl_inserted_at_list,etl_updated_at_list))
+                zip(created_at_list,product_id_list,quantity_list,amount_list,customer_id_list,etl_inserted_at_list,etl_updated_at_list,_is_delayed_list))
     
     #dirname = os.path.dirname(__file__)
     #filename = os.path.join(dirname,'./sources/init_load.csv')
-
+    #print(output)
     with open(filename,'w',newline='') as file:
         writer = csv.writer(file)
-
         for row in output:
             writer.writerow(row)
     
-def load_csv(filename):
-    execute_sql("PUT file://{} @~".format(filename))
+def load_csv(filename, Table):
+    
+    table_ref = Table.__table_args__['schema']+'.'+Table.__tablename__
+    base_filename = os.path.basename(filename)
+
+    execute_sql("PUT file://{filename} @~".format(filename=filename))
     execute_sql(
         """
-            COPY INTO jaffle_shop.sales(created_at,product_id,quantity,amount,customer_id,invoice_id,etl_inserted_at,etl_updated_at)
+            COPY INTO {table_ref}(created_at,product_id,quantity,amount,customer_id,etl_inserted_at,etl_updated_at,_is_delayed)
             FROM (
-                    SELECT to_timestamp_ntz(f.$1),to_number(f.$2),to_number(f.$3),to_number(f.$4),to_number(f.$5),to_number(f.$6),to_timestamp_ntz(f.$7),to_timestamp_ntz(f.$8)
-                    FROM @~/{} f
+                    SELECT to_timestamp_ntz(f.$1),to_number(f.$2),to_number(f.$3),to_number(f.$4),to_number(f.$5),to_timestamp_ntz(f.$6),to_timestamp_ntz(f.$7),to_boolean(f.$8)
+                    FROM @~/{base_filename} f
                 )
-        """.format(os.path.basename(filename))
+        """.format(table_ref=table_ref, base_filename = base_filename)
     )
     execute_sql("RM @~ pattern='.*.csv.*'")
 
@@ -176,26 +146,28 @@ def insert_sale(delayed_flag=0):
         created_at = max_etl_inserted_at + datetime.timedelta(seconds=random.randint(1,10))
         etl_inserted_at = created_at
         etl_updated_at = created_at
+        is_delayed = False
         print('max_created_at: ' + max_created_at.strftime(date_format))
         print('created_at: ' + created_at.strftime(date_format))
         print('etl_inserted_at: ' + etl_inserted_at.strftime(date_format))
         print('etl_updated_at: ' + etl_updated_at.strftime(date_format))
     elif delayed_flag == 1:
-        print("Current MAX(Sales.created_at): " + max_created_at.strftime(date_format))
+        print("Last Created Sale At: " + max_created_at.strftime(date_format))
+        print("Last Inserted Sale At: " + max_etl_inserted_at.strftime(date_format))
         delay_sec = input("Insert Sale => Type Delay (Seconds): ")
         delay_sec_fmt = int(delay_sec)
         created_at = max_created_at - datetime.timedelta(seconds=delay_sec_fmt)
         etl_inserted_at = max_etl_inserted_at + datetime.timedelta(seconds=random.randint(1,10))
         etl_updated_at = etl_inserted_at
+        is_delayed = True
         print('created_at (delayed): ' + created_at.strftime(date_format))
         print('etl_inserted_at (delayed): ' + etl_inserted_at.strftime(date_format))
         print('etl_updated_at (delayed): ' + etl_updated_at.strftime(date_format))
     
-    product_id = random.randint(100,110)
+    product_id = 100
     quantity = random.randint(1,5)
-    amount = random.randint(100,1000)
+    amount = quantity * 100
     customer_id = random.randint(100,199)
-    invoice_id = 0
     
     with Session() as session:
         sale = Sales(   
@@ -204,9 +176,9 @@ def insert_sale(delayed_flag=0):
                         quantity        = quantity,
                         amount          = amount,
                         customer_id     = customer_id,
-                        invoice_id      = invoice_id,
                         etl_inserted_at = etl_inserted_at,
-                        etl_updated_at  = etl_updated_at
+                        etl_updated_at  = etl_updated_at,
+                        _is_delayed     = is_delayed
                     ) 
         session.add(sale)
         session.commit()
@@ -258,7 +230,7 @@ def main():  #
             dirname = os.path.dirname(__file__)
             filename = os.path.join(dirname,'./sources/init_load.csv')
             generate_csv(filename,start_date_fmt, end_date_fmt, num_sales_fmt)
-            load_csv(filename)
+            load_csv(filename,Sales)
             print("CSV Loaded?") 
         elif option == '2':
             print("Inserting Single Sale:")
