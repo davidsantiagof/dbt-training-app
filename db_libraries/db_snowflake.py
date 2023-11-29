@@ -77,8 +77,8 @@ def generate_csv(filename, StartDateTime, EndDateTime, NumSales):
     td = EndDateTime - StartDateTime
     
     created_at_list      = sorted(([StartDateTime + random.random() * td for _ in range(NumSales)]))
-    product_id_list      = [100]* NumSales                                                              #Single Product Company (product_id = 100) (for now)
-    quantity_list        = random.choices(range(1,5),k=NumSales)
+    product_id_list      = random.choices(range(100,102),k=NumSales)                                    #Two Products Company (product_id = 100, 101) (for now)
+    quantity_list        = random.choices(range(1,6),k=NumSales)
     amount_list          = [q * 100 for q in quantity_list]                                             #Fixed Unit Price (Cents) (100)
     customer_id_list     = random.choices(range(100,199),k=NumSales)                                    #Fixed Number of Customers
     etl_inserted_at_list = created_at_list
@@ -150,7 +150,7 @@ def insert_sale(delayed_flag=0):
         print('etl_inserted_at (delayed): ' + etl_inserted_at.strftime(date_format))
         print('etl_updated_at (delayed): ' + etl_updated_at.strftime(date_format))
     
-    product_id = 100
+    product_id = random.randint(100,101)                                    #Two Products Company (product_id = 100, 101) (for now)
     quantity = random.randint(1,5)
     amount = quantity * 100
     customer_id = random.randint(100,199)
