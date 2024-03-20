@@ -26,37 +26,117 @@ engine_raw = create_engine(
               user=os.environ['SNOWFLAKE_USER'],
               password=os.environ['SNOWFLAKE_PASSWORD'],
               warehouse='newco_wh',
-              database='newco_sources_db',      
+              database='newco_sources',      
               autocommit=True
               )
             )
+
+class Products(Base):
+    __tablename__ = "products"
+    __table_args__ = {'schema': 'inventory_sys'}
+
+    id              = Column(Integer, Sequence(name="products_id_seq", schema="inventory_sys", start=1000, increment=1), primary_key=True, autoincrement=True)
+    name            = Column(String)
+    price           = Column(Numeric)
+    type            = Column(String)
+    etl_inserted_at = Column(DateTime)
+    etl_updated_at  = Column(DateTime)
+
+    def __init__(self, name, price, type, etl_inserted_at, etl_updated_at):
+        self.name            = name
+        self.price           = price
+        self.type            = type
+        self.etl_inserted_at = etl_inserted_at
+        self.etl_updated_at  = etl_updated_at
+
+class Customers(Base):
+    __tablename__ = "customers"
+    __table_args__ = {'schema': 'crm_sys'}
+
+    id              = Column(Integer, Sequence(name="customers_id_seq", schema="crm_sys", start=1000, increment=1), primary_key=True, autoincrement=True)
+    first_name      = Column(String)
+    last_name       = Column(String)
+    type            = Column(String)
+    etl_inserted_at = Column(DateTime)
+    etl_updated_at  = Column(DateTime)
+
+    def __init__(self, first_name, last_name, type, etl_inserted_at, etl_updated_at):
+        self.first_name      = first_name
+        self.last_name       = last_name
+        self.type            = type
+        self.etl_inserted_at = etl_inserted_at
+        self.etl_updated_at  = etl_updated_at
+
+class Stores(Base):
+    __tablename__ = "stores"
+    __table_args__ = {'schema': 'assets_sys'}
+
+    id              = Column(Integer, Sequence(name="stores_id_seq", schema="assets_sys", start=1, increment=1), primary_key=True, autoincrement=True)
+    name            = Column(String)
+    city            = Column(String)
+    country         = Column(String)
+    etl_inserted_at = Column(DateTime)
+    etl_updated_at  = Column(DateTime)
+
+    def __init__(self, name, city, country, etl_inserted_at, etl_updated_at):
+        self.name            = name
+        self.city            = city
+        self.country         = country
+        self.etl_inserted_at = etl_inserted_at
+        self.etl_updated_at  = etl_updated_at
+
+class Employees(Base):
+    __tablename__ = "employees"
+    __table_args__ = {'schema': 'human_resources_sys'}
+
+    id              = Column(Integer, Sequence(name="employees_id_seq", schema="human_resources_sys", start=1000, increment=1), primary_key=True, autoincrement=True)
+    first_name      = Column(String)
+    last_name       = Column(String)
+    role            = Column(String)
+    store_id        = Column(Integer)
+    etl_inserted_at = Column(DateTime)
+    etl_updated_at  = Column(DateTime)
+
+    def __init__(self, first_name, last_name, role, store_id, etl_inserted_at, etl_updated_at):
+        self.first_name      = first_name
+        self.last_name       = last_name
+        self.role            = role
+        self.store_id        = store_id
+        self.etl_inserted_at = etl_inserted_at
+        self.etl_updated_at  = etl_updated_at
 
 class Sales(Base):
     
     __tablename__ = "sales"
     __table_args__ = {'schema':'sales_sys'}
 
-    id              = Column(Integer, Sequence(name="sale_id_seq", schema="sales_sys", start=1000, increment=1), primary_key=True, autoincrement=True)
+    id              = Column(Integer, Sequence(name="sales_id_seq", schema="sales_sys", start=1000, increment=1), primary_key=True, autoincrement=True)
     created_at      = Column(DateTime)
+    order_id        = Column(Integer)
     product_id      = Column(Integer)
     quantity        = Column(Integer)
+    unit_price      = Column(Numeric)
     amount          = Column(Numeric)
     customer_id     = Column(Integer)
+    store_id        = Column(Integer)
+    employee_id     = Column(Integer)
     etl_inserted_at = Column(DateTime)
     etl_updated_at  = Column(DateTime)
-    
     _is_delayed    = Column(Boolean)
     
-    def __init__(self, created_at, product_id, quantity, amount, customer_id, etl_inserted_at, etl_updated_at, _is_delayed= False):
+    def __init__(self, created_at, order_id, product_id, quantity, unit_price, amount, customer_id, store_id, employee_id, etl_inserted_at, etl_updated_at, _is_delayed= False):
             
         self.created_at      = created_at
+        self.order_id        = order_id
         self.product_id      = product_id
         self.quantity        = quantity
+        self.unit_price      = unit_price
         self.amount          = amount
         self.customer_id     = customer_id
+        self.store_id        = store_id
+        self.employee_id     = employee_id
         self.etl_inserted_at = etl_inserted_at
         self.etl_updated_at  = etl_updated_at
-        
         self._is_delayed     = _is_delayed
         
 def create_table(Table):
@@ -175,44 +255,29 @@ def main():  #
 
     while True:
         print("\nOPTIONS")
-        print("c: Create sales Table")
-        print("d: Drop sales Table")
-        print("1: Load Sales")
-        print("2: Insert Single Sale")
-        print("3: Insert Single Delayed Sale")
+        print("1: Initialize Tables")
+        print("2: Drop Tables")
         print("x: Exit\n")
         option = input("Please enter option: ")
-        if option == 'c':
+        if option == '1':
+            create_table(Products)
+            create_table(Customers)
+            create_table(Stores)
+            create_table(Employees)
             create_table(Sales)
-            print("Table Created OK")
-        elif option == 'd':
-            drop_table(Sales)
-            print("Table Droped OK")
-        elif option == '1':
-            date_format = '%Y-%m-%d %H:%M:%S'
-
-            start_date = input("Load Sales => Type StartDate (YYYY-MM-DD HH:MM:SS): ")
-            start_date_fmt = datetime.datetime.strptime(start_date,date_format)
-
-            end_date = input("Load Sales => Type EndDate (YYYY-MM-DD HH:MM:SS): ")
-            end_date_fmt = datetime.datetime.strptime(end_date,date_format)
-
-            num_sales = input("Load Sales => Type NumSales: ")
-            num_sales_fmt = int(num_sales)
-            
-            dirname = os.path.dirname(__file__)
-            filename = os.path.join(dirname,'./sources/init_load.csv')
-            generate_csv(filename,start_date_fmt, end_date_fmt, num_sales_fmt)
-            load_csv(filename,Sales)
-            print("CSV Loaded OK") 
+            print("Tables Initialized")
         elif option == '2':
-            print("Inserting Single Sale:")
-            insert_sale(0)
-            print("Single Sale Inserted OK")
-        elif option == '3':
-            print("Inserting Single Delayed Sale:")
-            insert_sale(1)
-            print("Delayed Single Sale Inserted OK")
+            drop_table(Products)
+            #execute_sql("DROP SEQUENCE newco_sources.inventory_sys.products_id_seq")
+            drop_table(Customers)
+            #execute_sql("DROP SEQUENCE newco_sources.crm_sys.customers_id_seq")
+            drop_table(Stores)
+            #execute_sql("DROP SEQUENCE newco_sources.assets_sys.stores_id_seq")
+            drop_table(Employees)
+            #execute_sql("DROP SEQUENCE newco_sources.human_resources_sys.employees_id_seq")
+            drop_table(Sales)
+            #execute_sql("DROP SEQUENCE newco_sources.sales_sys.sales_id_seq")
+            print("Tables Droped")
         elif option == 'x':
             print("Exiting...")
             break
