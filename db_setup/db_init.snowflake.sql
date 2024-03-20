@@ -14,6 +14,11 @@ CREATE OR REPLACE SEQUENCE newco_sources.assets_sys.stores_id_seq START = 1000 I
 CREATE OR REPLACE SEQUENCE newco_sources.human_resources_sys.employees_id_seq START = 1000 INCREMENT = 1;
 CREATE OR REPLACE SEQUENCE newco_sources.sales_sys.sales_id_seq START = 1000 INCREMENT = 1;
 
+DROP SEQUENCE newco_sources.inventory_sys.products_id_seq START = 1000 INCREMENT = 1;
+DROP SEQUENCE newco_sources.crm_sys.customers_id_seq START = 1000 INCREMENT = 1;
+DROP SEQUENCE newco_sources.assets_sys.stores_id_seq START = 1000 INCREMENT = 1;
+DROP SEQUENCE newco_sources.human_resources_sys.employees_id_seq START = 1000 INCREMENT = 1;
+DROP SEQUENCE newco_sources.sales_sys.sales_id_seq START = 1000 INCREMENT = 1;
 
 
 --CREATE OR REPLACE SEQUENCE raw_sources.jaffle_shop.order_id_seq START = 1000 INCREMENT = 1;

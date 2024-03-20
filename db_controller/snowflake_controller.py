@@ -16,6 +16,15 @@ from dotenv import load_dotenv
 
 import csv
 
+#from faker.providers.person.en import Provider as PersonProvider
+#from faker.providers.color.en_US import Provider as ColorProvider
+
+from faker import Faker
+import faker_commerce
+
+fake = Faker()
+fake.add_provider(faker_commerce.Provider)
+
 Base = declarative_base()
 
 load_dotenv()
@@ -37,7 +46,7 @@ class Products(Base):
 
     id              = Column(Integer, Sequence(name="products_id_seq", schema="inventory_sys", start=1000, increment=1), primary_key=True, autoincrement=True)
     name            = Column(String)
-    price           = Column(Numeric)
+    price           = Column(Numeric(38,2))
     type            = Column(String)
     etl_inserted_at = Column(DateTime)
     etl_updated_at  = Column(DateTime)
@@ -115,8 +124,8 @@ class Sales(Base):
     order_id        = Column(Integer)
     product_id      = Column(Integer)
     quantity        = Column(Integer)
-    unit_price      = Column(Numeric)
-    amount          = Column(Numeric)
+    unit_price      = Column(Numeric(38,2))
+    amount          = Column(Numeric(38,2))
     customer_id     = Column(Integer)
     store_id        = Column(Integer)
     employee_id     = Column(Integer)
@@ -151,6 +160,136 @@ def execute_sql(sql):
         result = session.execute(sql)
         session.commit()
     return result
+
+def initialize_products(n=10):
+
+    #name_list = [fake.ecommerce_name() for _ in range(n)]
+    #price_list = random.choices(range(10,100),k=n)
+    #type_list = random.choices(['Clothing','Footwear','Accesories'],k=n)
+    #etl_inserted_at_list = [datetime.datetime.now(datetime.UTC)] * n
+    #etl_updated_at_list = [datetime.datetime.now(datetime.UTC)] * n
+    #
+    #output = list(
+    #            zip(name_list,price_list,type_list,etl_inserted_at_list,etl_updated_at_list,))
+    
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname,'./sources/products_init.csv')
+    #with open(filename,'w',newline='') as file:
+    #    writer = csv.writer(file)
+    #    for row in output:
+    #        writer.writerow(row)
+    
+    table_ref = Products.__table_args__['schema']+'.'+Products.__tablename__
+    
+    base_filename = os.path.basename(filename)
+
+    execute_sql("PUT file://{filename} @~".format(filename=filename))
+    execute_sql(
+        """
+            COPY INTO {table_ref}(name,price,type,etl_inserted_at,etl_updated_at)
+            FROM (
+                    SELECT f.$1,to_decimal(f.$2,10,2),f.$3,to_timestamp_ntz(f.$4),to_timestamp_ntz(f.$5)
+                    FROM @~/{base_filename} f
+                )
+        """.format(table_ref=table_ref, base_filename = base_filename)
+    )
+    execute_sql("RM @~ pattern='.*.csv.*'")
+
+
+def initialize_customers(n=10):
+
+    first_name_list = [fake.first_name() for _ in range(n)]     
+    last_name_list =  [fake.last_name() for _ in range(n)]          
+    type_list = random.choices(['New','Standard','Premium'],k=n)          
+    etl_inserted_at_list = [datetime.datetime.now(datetime.UTC)] * n
+    etl_updated_at_list = [datetime.datetime.now(datetime.UTC)] * n
+
+    output = list(
+                zip(first_name_list,last_name_list,type_list,etl_inserted_at_list,etl_updated_at_list,))
+    
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname,'./sources/customers_init.csv')
+    #print(output)
+    with open(filename,'w',newline='') as file:
+        writer = csv.writer(file)
+        for row in output:
+            writer.writerow(row)
+    
+    table_ref = Customers.__table_args__['schema']+'.'+Customers.__tablename__
+    
+    base_filename = os.path.basename(filename)
+
+    execute_sql("PUT file://{filename} @~".format(filename=filename))
+    execute_sql(
+        """
+            COPY INTO {table_ref}(first_name,last_name,type,etl_inserted_at,etl_updated_at)
+            FROM (
+                    SELECT f.$1,f.$2,f.$3,to_timestamp_ntz(f.$4),to_timestamp_ntz(f.$5)
+                    FROM @~/{base_filename} f
+                )
+        """.format(table_ref=table_ref, base_filename = base_filename)
+    )
+    execute_sql("RM @~ pattern='.*.csv.*'")
+
+def initialize_stores(n=10):
+
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname,'./sources/stores_init.csv')
+    
+    table_ref = Stores.__table_args__['schema']+'.'+Stores.__tablename__
+    
+    base_filename = os.path.basename(filename)
+
+    execute_sql("PUT file://{filename} @~".format(filename=filename))
+    execute_sql(
+        """
+            COPY INTO {table_ref}(name,city,country,etl_inserted_at,etl_updated_at)
+            FROM (
+                    SELECT f.$1,f.$2,f.$3,to_timestamp_ntz(f.$4),to_timestamp_ntz(f.$5)
+                    FROM @~/{base_filename} f
+                )
+        """.format(table_ref=table_ref, base_filename = base_filename)
+    )
+    execute_sql("RM @~ pattern='.*.csv.*'")
+
+
+def initialize_employees(n=30):
+
+    first_name_list = [fake.first_name() for _ in range(n)]     
+    last_name_list =  [fake.last_name() for _ in range(n)]          
+    role_list = ['Store Manager'] * 10 + ['Staff'] * 20  
+    store_id = [num for num in range(1,11)] * 3 
+    etl_inserted_at_list = [datetime.datetime.now(datetime.UTC)] * n
+    etl_updated_at_list = [datetime.datetime.now(datetime.UTC)] * n
+
+    output = list(
+                zip(first_name_list,last_name_list,role_list,store_id,etl_inserted_at_list,etl_updated_at_list,))
+    
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname,'./sources/employees_init.csv')
+    #print(output)
+    with open(filename,'w',newline='') as file:
+        writer = csv.writer(file)
+        for row in output:
+            writer.writerow(row)
+    
+    table_ref = Employees.__table_args__['schema']+'.'+Employees.__tablename__
+    
+    base_filename = os.path.basename(filename)
+
+    execute_sql("PUT file://{filename} @~".format(filename=filename))
+    execute_sql(
+        """
+            COPY INTO {table_ref}(first_name,last_name,role,store_id,etl_inserted_at,etl_updated_at)
+            FROM (
+                    SELECT f.$1,f.$2,f.$3,to_number(f.$4),to_timestamp_ntz(f.$5),to_timestamp_ntz(f.$6)
+                    FROM @~/{base_filename} f
+                )
+        """.format(table_ref=table_ref, base_filename = base_filename)
+    )
+    execute_sql("RM @~ pattern='.*.csv.*'")
+
+
 
 def generate_csv(filename, StartDateTime, EndDateTime, NumSales):
     
@@ -255,29 +394,30 @@ def main():  #
 
     while True:
         print("\nOPTIONS")
-        print("1: Initialize Tables")
+        print("1: Create Tables")
         print("2: Drop Tables")
+        print("3: Initialize Tables")
         print("x: Exit\n")
         option = input("Please enter option: ")
         if option == '1':
             create_table(Products)
-            create_table(Customers)
-            create_table(Stores)
-            create_table(Employees)
-            create_table(Sales)
+            #create_table(Customers)
+            #create_table(Stores)
+            #create_table(Employees)
+            #create_table(Sales)
             print("Tables Initialized")
         elif option == '2':
             drop_table(Products)
-            #execute_sql("DROP SEQUENCE newco_sources.inventory_sys.products_id_seq")
-            drop_table(Customers)
-            #execute_sql("DROP SEQUENCE newco_sources.crm_sys.customers_id_seq")
-            drop_table(Stores)
-            #execute_sql("DROP SEQUENCE newco_sources.assets_sys.stores_id_seq")
-            drop_table(Employees)
-            #execute_sql("DROP SEQUENCE newco_sources.human_resources_sys.employees_id_seq")
-            drop_table(Sales)
-            #execute_sql("DROP SEQUENCE newco_sources.sales_sys.sales_id_seq")
+            #drop_table(Customers)
+            #drop_table(Stores)
+            #drop_table(Employees)
+            #drop_table(Sales)
             print("Tables Droped")
+        elif option == '3':
+            #initialize_products()
+            #initialize_customers(10)
+            initialize_stores()
+            #initialize_employees()
         elif option == 'x':
             print("Exiting...")
             break
