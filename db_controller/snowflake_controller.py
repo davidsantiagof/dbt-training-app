@@ -289,106 +289,74 @@ def initialize_employees(n=30):
     )
     execute_sql("RM @~ pattern='.*.csv.*'")
 
-
-
-def generate_csv(filename, StartDateTime, EndDateTime, NumSales):
+def generate_orders(n, start_date_utc_str, end_date_utc_str):
     
-    td = EndDateTime - StartDateTime
+    date_format = '%Y-%m-%d %H:%M:%S'
+    start_date_utc = datetime.datetime.strptime(start_date_utc_str,date_format)
+    end_date_utc = datetime.datetime.strptime(end_date_utc_str,date_format)
     
-    created_at_list      = sorted(([StartDateTime + random.random() * td for _ in range(NumSales)]))
-    product_id_list      = random.choices(range(100,102),k=NumSales)                                    #Two Products Company (product_id = 100, 101) (for now)
-    quantity_list        = random.choices(range(1,6),k=NumSales)
-    amount_list          = [q * 100 for q in quantity_list]                                             #Fixed Unit Price (Cents) (100)
-    customer_id_list     = random.choices(range(100,199),k=NumSales)                                    #Fixed Number of Customers
-    etl_inserted_at_list = created_at_list
-    etl_updated_at_list  = created_at_list
-    _is_delayed_list     = [False] * NumSales
+    sales = []
 
+    Session = sessionmaker(bind=engine_raw)
 
-    output = list(
-                zip(created_at_list,product_id_list,quantity_list,amount_list,customer_id_list,etl_inserted_at_list,etl_updated_at_list,_is_delayed_list))
+    with Session() as session:
+        products = session.query(Products).all()
+        customers = session.query(Customers).all()
+        stores = session.query(Stores).all()
+        max_order_id = session.query(func.max(Sales.order_id))
+        
+    td = end_date_utc - start_date_utc
     
-    #dirname = os.path.dirname(__file__)
-    #filename = os.path.join(dirname,'./sources/init_load.csv')
-    #print(output)
+    dates_list = sorted(([random.random() * td + start_date_utc for _ in range(n)]), reverse=True)
+    
+    if max_order_id.scalar() is not None:
+        order_id = max_order_id.scalar()+1
+    else:
+        order_id = 100
+
+    for step in range(n):
+        created_at = dates_list.pop()
+        customer_id = random.sample(customers,1)[0].id
+        store_id = random.sample(stores,1)[0].id
+        with Session() as session:
+            employees = session.query(Employees).filter(Employees.store_id == store_id).all()
+        employee_id = random.sample(employees,1)[0].id
+        etl_inserted_at = created_at
+        etl_updated_at = created_at
+        
+        order_products = random.sample(products,random.randint(1,5))
+        
+        for product in order_products:
+            
+            product_id = product.id
+            quantity = random.randint(1,3)
+            unit_price = product.price
+            amount = quantity * unit_price
+
+            sales.append([created_at, order_id, product_id, quantity, unit_price, amount, customer_id, store_id, employee_id, etl_inserted_at, etl_updated_at])
+        order_id += 1
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname,'./sources/sales_init.csv')
     with open(filename,'w',newline='') as file:
         writer = csv.writer(file)
-        for row in output:
+        for row in sales:
             writer.writerow(row)
     
-def load_csv(filename, Table):
+    table_ref = Sales.__table_args__['schema']+'.'+Sales.__tablename__
     
-    table_ref = Table.__table_args__['schema']+'.'+Table.__tablename__
     base_filename = os.path.basename(filename)
 
     execute_sql("PUT file://{filename} @~".format(filename=filename))
     execute_sql(
         """
-            COPY INTO {table_ref}(created_at,product_id,quantity,amount,customer_id,etl_inserted_at,etl_updated_at,_is_delayed)
+            COPY INTO {table_ref}(created_at,order_id,product_id,quantity,unit_price,amount,customer_id,store_id,employee_id,etl_inserted_at,etl_updated_at)
             FROM (
-                    SELECT to_timestamp_ntz(f.$1),to_number(f.$2),to_number(f.$3),to_number(f.$4),to_number(f.$5),to_timestamp_ntz(f.$6),to_timestamp_ntz(f.$7),to_boolean(f.$8)
+                    SELECT to_timestamp_ntz(f.$1),to_number(f.$2),to_number(f.$3),to_decimal(f.$4,10,2),to_decimal(f.$5,10,2),to_decimal(f.$6,10,2),to_number(f.$7),to_number(f.$8),to_number(f.$9),to_timestamp_ntz(f.$10),to_timestamp_ntz(f.$11)
                     FROM @~/{base_filename} f
                 )
         """.format(table_ref=table_ref, base_filename = base_filename)
     )
     execute_sql("RM @~ pattern='.*.csv.*'")
-
-    
-def insert_sale(delayed_flag=0):
-    
-    date_format = '%Y-%m-%d %H:%M:%S'
-    
-    Session = sessionmaker(bind=engine_raw)
-
-    with Session() as session:
-        result_max_created_at = session.query(func.max(Sales.created_at)).first()                       #list
-        result_max_etl_inserted_at = session.query(func.max(Sales.etl_inserted_at)).first()             #list
-
-    max_created_at = result_max_created_at[0]
-    max_etl_inserted_at = result_max_etl_inserted_at[0]
-    
-    if delayed_flag == 0:
-        created_at = max_etl_inserted_at + datetime.timedelta(seconds=random.randint(1,10))
-        etl_inserted_at = created_at
-        etl_updated_at = created_at
-        is_delayed = False
-        print('max_created_at: ' + max_created_at.strftime(date_format))
-        print('created_at: ' + created_at.strftime(date_format))
-        print('etl_inserted_at: ' + etl_inserted_at.strftime(date_format))
-        print('etl_updated_at: ' + etl_updated_at.strftime(date_format))
-    elif delayed_flag == 1:
-        print("Last Created Sale At: " + max_created_at.strftime(date_format))
-        print("Last Inserted Sale At: " + max_etl_inserted_at.strftime(date_format))
-        delay_sec = input("Insert Sale => Type Delay (Seconds): ")
-        delay_sec_fmt = int(delay_sec)
-        created_at = max_created_at - datetime.timedelta(seconds=delay_sec_fmt)
-        etl_inserted_at = max_etl_inserted_at + datetime.timedelta(seconds=random.randint(1,10))
-        etl_updated_at = etl_inserted_at
-        is_delayed = True
-        print('created_at (delayed): ' + created_at.strftime(date_format))
-        print('etl_inserted_at (delayed): ' + etl_inserted_at.strftime(date_format))
-        print('etl_updated_at (delayed): ' + etl_updated_at.strftime(date_format))
-    
-    product_id = random.randint(100,101)                                    #Two Products Company (product_id = 100, 101) (for now)
-    quantity = random.randint(1,5)
-    amount = quantity * 100
-    customer_id = random.randint(100,199)
-    
-    with Session() as session:
-        sale = Sales(   
-                        created_at      = created_at,
-                        product_id      = product_id,
-                        quantity        = quantity,
-                        amount          = amount,
-                        customer_id     = customer_id,
-                        etl_inserted_at = etl_inserted_at,
-                        etl_updated_at  = etl_updated_at,
-                        _is_delayed     = is_delayed
-                    ) 
-        session.add(sale)
-        session.commit()
-        session.refresh(sale)
-    return sale
 
 def main():  # 
 
@@ -405,7 +373,7 @@ def main():  #
             #create_table(Stores)
             #create_table(Employees)
             #create_table(Sales)
-            print("Tables Initialized")
+            print("Tables Created")
         elif option == '2':
             drop_table(Products)
             #drop_table(Customers)
@@ -416,8 +384,24 @@ def main():  #
         elif option == '3':
             #initialize_products()
             #initialize_customers(10)
-            initialize_stores()
+            #initialize_stores()
             #initialize_employees()
+            generate_orders(800, "2023-01-01 00:00:00", "2023-01-21 23:59:59")
+            generate_orders(600, "2023-02-01 00:00:00", "2023-02-28 23:59:59")
+            generate_orders(600, "2023-03-01 00:00:00", "2023-03-31 23:59:59")
+            generate_orders(500, "2023-04-01 00:00:00", "2023-04-30 23:59:59")
+            generate_orders(500, "2023-05-01 00:00:00", "2023-05-31 23:59:59")
+            generate_orders(1000, "2023-06-01 00:00:00", "2023-06-30 23:59:59")
+            generate_orders(1000, "2023-07-01 00:00:00", "2023-07-31 23:59:59")
+            generate_orders(800, "2023-08-01 00:00:00", "2023-08-31 23:59:59")
+            generate_orders(700, "2023-09-01 00:00:00", "2023-09-30 23:59:59")
+            generate_orders(700, "2023-10-01 00:00:00", "2023-10-31 23:59:59")
+            generate_orders(800, "2023-11-01 00:00:00", "2023-11-30 23:59:59")
+            generate_orders(2000, "2023-12-01 00:00:00", "2023-12-31 23:59:59")
+            print("Tables Initialized")
+        elif option == 't':
+            generate_orders(5, "2023-01-01 00:00:00", "2023-01-01 23:59:59")
+            generate_orders(5, "2023-01-02 00:00:00", "2023-01-02 23:59:59")
         elif option == 'x':
             print("Exiting...")
             break
