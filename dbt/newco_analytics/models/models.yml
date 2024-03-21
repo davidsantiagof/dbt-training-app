@@ -2,14 +2,35 @@ version: 2
 
 models:
   - name: orders_daily
+    description: Aggregates item sales into orders at the daily level.
     columns:
       - name: sale_date 
+        description: Date of order
         tests: 
           - not_null
       - name: order_id
+        description: Order ID (PK)
         tests:
           - not_null
           - unique
       - name: store_id
+        description: Store (ID) where the order was made
         tests:
           - not_null
+      - name: employee_id
+        description: Employee (ID) who made the order
+        test:
+          - not_null
+      - name: customer_id
+        description: Customer (ID) who made the order
+        test:
+          - not_null
+      - name: quanitity
+        description: Number of items sold in the order
+        test:
+          - not_null
+      - name: amount
+        description: Total amount paid for the order
+        test:
+          - not_null
+      
