@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: orders_daily
+    columns:
+      - name: sale_date 
+        tests: 
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: store_id
+        tests:
+          - not_null

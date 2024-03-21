@@ -22,9 +22,65 @@ sources:
       - name: employees
 
   - name: sales_sys
+    description: "Schema from NewCo sales system"
     database: newco_sources  
     tables:
       - name: sales
+        description: "Sales source table at item level"
+        columns:
+          - name: id
+            description: "Sale ID (Primary Key)"
+            tests:
+              - unique
+              - not_null
+          - name: created_at
+            description: "Timestamp of when the sale was registered on the POS system"
+            tests:
+              - not_null
+          - name: order_id
+            description: "Order ID which this item corresponds to"
+            tests:
+              - not_null
+          - name: product_id
+            description: "Product ID of the item (product) sold "
+            tests:
+              - not_null
+          - name: quantity
+            description: "Quantity sold"
+            tests:
+              - not_null
+          - name: unit_price
+            description: "Unit price for this product"
+            tests:
+              - not_null
+          - name: amount
+            description: "Total amount sold for this product - Quantity x Unit Price "
+            tests:
+              - not_null
+          - name: customer_id
+            description: "Customer identificator"
+            tests:
+              - not_null
+          - name: store_id
+            description: "Store ID where the item was sold"
+            tests:
+              - not_null
+          - name: employee_id
+            description: "Employee (ID) who made the sale"
+            tests:
+              - not_null
+          - name: etl_inserted_at
+            description: "Timestamp of record ingestion"
+            tests:
+              - not_null
+          - name: etl_updated_at
+            description: "Timestamp of record update"
+            tests:
+              - not_null
+          
+          
+          
+          
       
 
   
