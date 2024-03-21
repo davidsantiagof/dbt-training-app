@@ -1,0 +1,30 @@
+version: 2
+
+sources:
+  - name: inventory_sys
+    database: newco_sources  
+    tables:
+      - name: products
+  
+  - name: crm_sys
+    database: newco_sources  
+    tables:
+      - name: customers
+  
+  - name: assets_sys
+    database: newco_sources  
+    tables:
+      - name: stores
+  
+  - name: human_resources_sys
+    database: newco_sources  
+    tables:
+      - name: employees
+
+  - name: sales_sys
+    database: newco_sources  
+    tables:
+      - name: sales
+      
+
+  
